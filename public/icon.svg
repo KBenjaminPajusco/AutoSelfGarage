@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#b8161c"/>
+  <path d="M0 400h512v40H0z" fill="#f2c200"/>
+  <path d="M40 400l40-40h40l-40 40zm96 0l40-40h40l-40 40zm96 0l40-40h40l-40 40zm96 0l40-40h40l-40 40zm96 0l40-40h40l-40 40z" fill="#121417"/>
+  <path d="M96 300l40-104h240l40 104v56H96z" fill="#fff"/>
+  <path d="M150 210h212l28 74H122z" fill="#2b3035"/>
+  <circle cx="168" cy="356" r="40" fill="#121417"/><circle cx="344" cy="356" r="40" fill="#121417"/>
+  <circle cx="168" cy="356" r="16" fill="#c9ced4"/><circle cx="344" cy="356" r="16" fill="#c9ced4"/>
+  <text x="256" y="150" font-family="Impact, Arial Black, sans-serif" font-size="96" fill="#f2c200" text-anchor="middle">ASG</text>
+</svg>

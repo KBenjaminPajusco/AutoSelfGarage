@@ -1,0 +1,5 @@
+node_modules/
+*.log
+# sauvegardes locales de parties (donnees saisies sur ce poste)
+data/ancienne-base.json
+garage-*.json

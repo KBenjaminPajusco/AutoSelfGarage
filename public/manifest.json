@@ -1,0 +1,12 @@
+{
+  "name": "Auto Self Garage",
+  "short_name": "Garage",
+  "description": "ERP 3D de l'atelier : voitures, clients, réserve, mécanos",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "any",
+  "background_color": "#15181d",
+  "theme_color": "#b8161c",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}

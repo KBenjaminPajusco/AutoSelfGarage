@@ -1,0 +1,10 @@
+{
+  "name": "auto-self-garage",
+  "version": "0.1.0",
+  "private": true,
+  "description": "ERP 3D du garage Auto Self Garage (Saint-Herblain) — sans serveur, données dans le navigateur (IndexedDB)",
+  "scripts": {
+    "start": "node server.js",
+    "site": "node tools/build-site.js"
+  }
+}
