@@ -339,3 +339,9 @@ dialog#modal::backdrop { background: #000000a0; backdrop-filter: none; }
   #dock button.primary .t { display: none; } #dock button.primary .ts { display: inline; }
   #dock button::after { left: 25%; right: 25%; }
 }
+
+/* inventaire sur telephone : la grille prend toute la place, nom sous chaque case */
+.inv-wrap.solo { grid-template-columns: 1fr; }
+.slot .nm { position: absolute; left: 2px; right: 2px; top: 2px; font: 600 9px/1.1 "Barlow Condensed", sans-serif; color: #dfe3e7; text-shadow: 0 1px 2px #000; text-align: left; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; text-transform: none; letter-spacing: 0; }
+@media (max-width: 760px) { .inv { grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); } #m-body .inv-detail { position: static; order: 0; } .slot .cam { top: auto; bottom: 2px; } }
+.inv-wrap.solo .slot { padding: 22px 8px 8px; }

@@ -76,9 +76,9 @@ const TEX = {
     x.font = 'bold 104px "Arial Black", Impact, sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(text, w / 2, 82, w - 60);
     x.font = 'bold 34px Arial'; x.fillText(sub, w / 2, 160, w - 60);
   }),
-  screen: () => canvasTex(256, 160, (x, w, h) => { // ecran du PC du bureau (CRM)
+  screen: () => canvasTex(256, 160, (x, w, h) => { // ecran du PC du bureau
     x.fillStyle = '#10243e'; x.fillRect(0, 0, w, h); x.fillStyle = '#2e6fd8'; x.fillRect(0, 0, w, 22);
-    x.fillStyle = '#fff'; x.font = 'bold 14px Arial'; x.fillText('CRM', 8, 16);
+    x.fillStyle = '#fff'; x.font = 'bold 14px Arial'; x.fillText('Garage', 8, 16);
     x.fillStyle = '#8fb3e8'; for (let i = 0; i < 6; i++) x.fillRect(10, 34 + i * 20, 120 + Math.random() * 100, 8);
   }),
 };
@@ -205,7 +205,7 @@ export class World {
     this.buildGarage(g); this.buildSpots(site); this.buildVisitor(g);
     toonify(this.scene);
     const moving = new Set([...this.lifts.values()].map((l) => l.car));
-    const a = mergeStatic(this.garage, (o) => o === this.roofGarage || moving.has(o) || o.userData.crm || o.userData.stock);
+    const a = mergeStatic(this.garage, (o) => o === this.roofGarage || moving.has(o) || o.userData.stock);
     const b = mergeStatic(this.roofGarage);
     const c = mergeStatic(this.scene, (o) => o === this.garage || o === this.visitor);
     console.info(`[perf] maillages fusionnes : atelier ${a.before}→${a.after}, toit ${b.before}→${b.after}, site ${c.before}→${c.after}`);
@@ -405,11 +405,11 @@ export class World {
     const du = O.u0 + 0.5;
     box(du, du + 2, 2.7, 3.5, 0.72, 0.76, wood); for (const [a, b] of [[du + 0.05, 2.75], [du + 1.9, 2.75], [du + 0.05, 3.4], [du + 1.9, 3.4]]) box(a, a + 0.05, b, b + 0.05, 0, 0.72, black);
     const screen = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.38, 0.04), [black, black, black, black, black, new THREE.MeshBasicMaterial({ map: TEX.screen() })]);
-    at(screen, du + 1, 0.98, 3.28, Math.PI); screen.userData.crm = true; this.crmScreen = screen;
+    at(screen, du + 1, 0.98, 3.28, Math.PI);
     box(du + 0.97, du + 1.03, 3.2, 3.3, 0.76, 0.8, black);
     const chair = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.25, 0.08, 12), black); at(chair, du + 1, 0.48, 2.3);
     box(O.u1 - 0.5, O.u1 - 0.15, 2.4, 4.0, 0, 1.9, M('#7c8a99'));                                                  // armoire a classeurs
-    this.addLabel('<b>Bureau</b><small>poste CRM</small>', this.uv((O.u0 + O.u1) / 2, (O.v0 + O.v1) / 2, 2.4), 'zone', 50);
+    this.addLabel('<b>Bureau</b>', this.uv((O.u0 + O.u1) / 2, (O.v0 + O.v1) / 2, 2.4), 'zone', 50);
     // ---- toilettes ----
     const Tt = I.toilets, tdu = Tt.u0 + 0.6;
     box(Tt.u0, Tt.u0 + t, 0.2, Tt.v1, 0, wallH, tile);
@@ -785,12 +785,11 @@ export class World {
       ray(ev);
       const objs = [...[...this.vehicles.values()].map((e) => e.group), ...[...this.mechanics.values()].map((m) => m.walker.p)];
       if (this.visitor) objs.push(this.visitor);
-      if (this.crmScreen) objs.push(this.crmScreen);
       if (this.stockHit) objs.push(this.stockHit);
       const h = this.raycaster.intersectObjects(objs, true)[0];
       const hs = this.raycaster.intersectObjects([...this.spots.values()].map((s) => s.hit), false)[0];
       const u = h && h.object.userData;
-      return { vehicleId: u && u.vehicleId, mechanicId: u && u.mechanicId, visitor: u && u.visitor, crm: u && u.crm, stock: u && u.stock, spotId: hs && hs.object.userData.spotId };
+      return { vehicleId: u && u.vehicleId, mechanicId: u && u.mechanicId, visitor: u && u.visitor, stock: u && u.stock, spotId: hs && hs.object.userData.spotId };
     };
     const nearestSpot = (p) => {
       let best = null, bd = 3.2;
@@ -827,7 +826,7 @@ export class World {
       const p = pick(e);
       for (const [id, sp] of this.spots) sp.hover = id === p.spotId;
       this.hoverVehicle = p.vehicleId || null;
-      this.canvas.style.cursor = p.vehicleId ? 'grab' : p.visitor || p.crm || p.stock || p.mechanicId || (p.spotId && !this.spots.get(p.spotId).occupied) ? 'pointer' : '';
+      this.canvas.style.cursor = p.vehicleId ? 'grab' : p.visitor || p.stock || p.mechanicId || (p.spotId && !this.spots.get(p.spotId).occupied) ? 'pointer' : '';
       for (const [vid, ve] of this.vehicles) ve.label.el.classList.toggle('hov', vid === this.hoverVehicle);
       this.refreshSpots();
     });
@@ -852,7 +851,6 @@ export class World {
       if (this.moveMode) { if (p.spotId && !this.spots.get(p.spotId).occupied) this.emit('placeSpot', this.moveMode, p.spotId); else this.emit('cancelMove'); return; }
       if (this.pickMode) { const id = p.vehicleId || (p.spotId && this.spots.get(p.spotId).occupied); return this.emit(id ? 'pickForPart' : 'cancelPick', id); }
       if (p.visitor) return this.emit('pickVisitor');
-      if (p.crm) return this.emit('openCRM');
       if (p.stock) return this.emit('openStock');
       if (p.mechanicId) return this.emit('pickMechanic', p.mechanicId);
       if (p.vehicleId) return this.emit('pickVehicle', p.vehicleId);

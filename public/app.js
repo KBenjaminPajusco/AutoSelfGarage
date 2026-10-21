@@ -621,6 +621,37 @@ async function uploadPhoto(file) {
   const r = await api('POST', 'photos?name=' + encodeURIComponent(file.name), file, true);
   return r.url;
 }
+// fiche d'un article : panneau a cote de la grille (ordinateur) ou fenetre a part (telephone)
+const narrowScreen = () => matchMedia('(max-width: 760px)').matches;
+const stockDetailHtml = (sel) => `<div class="inv-detail ${lv(sel)}">
+  <div class="big"><img src="${slotImg(sel)}" class="${sel.photo ? 'photo' : ''}" alt=""></div>
+  <div class="name">${esc(sel.libelle)}</div>
+  <div class="meta">${esc(sel.categorie || 'Divers')} · ${esc(sel.emplacement || 'emplacement ?')}${sel.ref ? ' · réf. ' + esc(sel.ref) : ''}</div>
+  <div class="bar"><i style="width:${Math.min(100, (Number(sel.qte) / Math.max(1, Number(sel.seuil || 1) * 3)) * 100)}%"></i></div>
+  <div class="meta">${stockLevel(sel) === 'low' ? '⚠ sous le seuil, à recommander' : stockLevel(sel) === 'mid' ? 'stock juste' : 'stock ok'} · seuil ${esc(sel.seuil || 0)}${sel.prix ? ' · ' + eur(sel.prix) + ' /u' : ''}</div>
+  <div class="qty big-qty"><button data-dq="-1">−</button><b>${esc(sel.qte)}</b><button data-dq="1">+</button></div>
+  <div class="row" style="justify-content:center"><button class="primary" data-place ${Number(sel.qte) > 0 ? '' : 'disabled'}>🔧 Poser sur une voiture</button></div>
+  <div class="row" style="justify-content:center"><label class="photo-btn"><input type="file" accept="image/*" capture="environment" data-photo hidden>📷 ${sel.photo ? 'Changer la photo' : 'Ajouter une photo'}</label>
+    ${sel.photo ? '<button class="ghost" data-nophoto>Icône</button>' : ''}</div>
+  <div class="row" style="justify-content:center"><button data-cmd>📦 Commander</button><button data-edit>Éditer le stock</button></div>
+  ${(sel.history || []).length ? `<div class="timeline" style="text-align:left">${sel.history.slice(-4).reverse().map((h) => `<div>${fmt(h.at)} · ${h.delta} → ${esc(h.plaque || '')}</div>`).join('')}</div>` : ''}
+</div>`;
+function bindStockDetail(el, sel, err) {
+  $$('[data-dq]', el).forEach((b) => b.onclick = async () => { await api('PATCH', 'stock/' + sel.id, { qte: Math.max(0, (Number(sel.qte) || 0) + Number(b.dataset.dq)) }); await refresh_(); });
+  $('[data-photo]', el).onchange = async (e) => { const f = e.target.files[0]; if (!f) return; try { toast('Envoi de la photo…'); const url = await uploadPhoto(f); await api('PATCH', 'stock/' + sel.id, { photo: url }); toast('', 1); await refresh_(); } catch (x) { toast(''); err(x); } };
+  $('[data-nophoto]', el) && ($('[data-nophoto]', el).onclick = async () => { await api('PATCH', 'stock/' + sel.id, { photo: '' }); await refresh_(); });
+  $('[data-cmd]', el).onclick = () => open(V.orderNew({ libelle: sel.libelle, ref: sel.ref, forStock: true }), true);
+  $('[data-edit]', el).onclick = () => open(V.stockItem(sel.id), true);
+  $('[data-place]', el).onclick = () => startPartPlacing(sel);
+}
+V.stockDetail = (id) => ({
+  title: () => `🗄 ${esc(((state.stock || []).find((s) => s.id === id) || {}).libelle || 'Article')}`,
+  render(body) {
+    const sel = (state.stock || []).find((s) => s.id === id); if (!sel) return back();
+    body.innerHTML = stockDetailHtml(sel) + '<div class="err"></div>';
+    bindStockDetail(body, sel, errBox(body));
+  },
+});
 V.stock = (tab = 'inv') => {
   const view = { tab, q: '', cat: null, sel: null, title: () => '🗄 Réserve — inventaire',
     render(body) {
@@ -632,44 +663,25 @@ V.stock = (tab = 'inv') => {
       $$('[data-tab]', body).forEach((b) => b.onclick = () => { view.tab = b.dataset.tab; show(); });
       const pane = $('[data-pane]', body);
       if (view.tab === 'inv' || view.tab === 'low') {
+        const narrow = narrowScreen(); // telephone : la grille seule, la fiche s'ouvre dans une autre fenetre
         const cats = [...new Set(items.map((s) => s.categorie || 'Divers'))].sort();
         const list = (view.tab === 'low' ? low : items).filter((s) => (!view.cat || (s.categorie || 'Divers') === view.cat)
           && (!view.q || [s.libelle, s.categorie, s.ref, s.emplacement].some((x) => String(x || '').toLowerCase().includes(view.q.toLowerCase()))));
-        const sel = items.find((s) => s.id === view.sel) || list[0];
+        const sel = narrow ? null : items.find((s) => s.id === view.sel) || list[0];
         pane.innerHTML = `<div class="row"><input data-q placeholder="Chercher un article…" value="${esc(view.q)}"><button class="primary" data-new>+ Article</button></div>
           <div class="chips" style="margin-top:8px"><button data-cat="" class="${!view.cat ? 'on' : ''}">Tout</button>${cats.map((c) => `<button data-cat="${esc(c)}" class="${view.cat === c ? 'on' : ''}">${esc(c)}</button>`).join('')}</div>
-          <div class="inv-wrap">
+          <div class="inv-wrap ${narrow ? 'solo' : ''}">
             <div class="inv">${list.map((s) => `<button class="slot ${lv(s)} ${sel && sel.id === s.id ? 'sel' : ''}" data-slot="${s.id}" title="${esc(s.libelle)}">
-              <img src="${slotImg(s)}" class="${s.photo ? 'photo' : ''}" alt=""><span class="q">${esc(s.qte)}</span>${s.photo ? '<span class="cam">📷</span>' : ''}</button>`).join('')}
-              ${Array.from({ length: Math.max(0, 12 - list.length) }, () => '<div class="slot empty"></div>').join('')}</div>
-            ${sel ? `<div class="inv-detail ${lv(sel)}">
-              <div class="big"><img src="${slotImg(sel)}" class="${sel.photo ? 'photo' : ''}" alt=""></div>
-              <div class="name">${esc(sel.libelle)}</div>
-              <div class="meta">${esc(sel.categorie || 'Divers')} · ${esc(sel.emplacement || 'emplacement ?')}${sel.ref ? ' · réf. ' + esc(sel.ref) : ''}</div>
-              <div class="bar"><i style="width:${Math.min(100, (Number(sel.qte) / Math.max(1, Number(sel.seuil || 1) * 3)) * 100)}%"></i></div>
-              <div class="meta">${stockLevel(sel) === 'low' ? '⚠ sous le seuil, à recommander' : stockLevel(sel) === 'mid' ? 'stock juste' : 'stock ok'} · seuil ${esc(sel.seuil || 0)}${sel.prix ? ' · ' + eur(sel.prix) + ' /u' : ''}</div>
-              <div class="qty big-qty"><button data-dq="-1">−</button><b>${esc(sel.qte)}</b><button data-dq="1">+</button></div>
-              <div class="row" style="justify-content:center"><label class="photo-btn"><input type="file" accept="image/*" capture="environment" data-photo hidden>📷 ${sel.photo ? 'Changer la photo' : 'Ajouter une photo'}</label>
-                ${sel.photo ? '<button class="ghost" data-nophoto>Icône</button>' : ''}</div>
-              <div class="row" style="justify-content:center"><button class="primary" data-place ${Number(sel.qte) > 0 ? '' : 'disabled'}>🔧 Poser sur une voiture</button></div>
-              <div class="row" style="justify-content:center"><button data-cmd>📦 Commander</button><button data-edit>Éditer le stock</button></div>
-              ${(sel.history || []).length ? `<div class="timeline" style="text-align:left">${sel.history.slice(-4).reverse().map((h) => `<div>${fmt(h.at)} · ${h.delta} → ${esc(h.plaque || '')}</div>`).join('')}</div>` : ''}
-            </div>` : ''}
+              <img src="${slotImg(s)}" class="${s.photo ? 'photo' : ''}" alt=""><span class="q">${esc(s.qte)}</span>${s.photo ? '<span class="cam">📷</span>' : ''}${narrow ? `<span class="nm">${esc(s.libelle)}</span>` : ''}</button>`).join('')}
+              ${Array.from({ length: Math.max(0, (narrow ? 8 : 12) - list.length) }, () => '<div class="slot empty"></div>').join('')}</div>
+            ${sel ? stockDetailHtml(sel) : ''}
           </div>
           <p class="hint">Valeur du stock : <b>${eur(value)}</b> · ${low.length} article(s) sous le seuil.</p>`;
         $('[data-q]', pane).oninput = (e) => { view.q = e.target.value; const pos = e.target.selectionStart; show(); const i = $('[data-q]'); if (i) { i.focus(); i.setSelectionRange(pos, pos); } };
         $$('[data-cat]', pane).forEach((b) => b.onclick = () => { view.cat = b.dataset.cat || null; show(); });
         $('[data-new]', pane).onclick = () => open(V.stockNew(), true);
-        $$('[data-slot]', pane).forEach((b) => b.onclick = () => { view.sel = b.dataset.slot; show(); });
-        if (sel) {
-          const err = errBox(body);
-          $$('[data-dq]', pane).forEach((b) => b.onclick = async () => { await api('PATCH', 'stock/' + sel.id, { qte: Math.max(0, (Number(sel.qte) || 0) + Number(b.dataset.dq)) }); view.sel = sel.id; await refresh_(); });
-          $('[data-photo]', pane).onchange = async (e) => { const f = e.target.files[0]; if (!f) return; try { toast('Envoi de la photo…'); const url = await uploadPhoto(f); await api('PATCH', 'stock/' + sel.id, { photo: url }); toast('', 1); view.sel = sel.id; await refresh_(); } catch (x) { toast(''); err(x); } };
-          $('[data-nophoto]', pane) && ($('[data-nophoto]', pane).onclick = async () => { await api('PATCH', 'stock/' + sel.id, { photo: '' }); await refresh_(); });
-          $('[data-cmd]', pane).onclick = () => open(V.orderNew({ libelle: sel.libelle, ref: sel.ref, forStock: true }), true);
-          $('[data-edit]', pane).onclick = () => open(V.stockItem(sel.id), true);
-          $('[data-place]', pane).onclick = () => startPartPlacing(sel);
-        }
+        $$('[data-slot]', pane).forEach((b) => b.onclick = () => { if (narrow) open(V.stockDetail(b.dataset.slot), true); else { view.sel = b.dataset.slot; show(); } });
+        if (sel) bindStockDetail($('.inv-detail', pane), sel, errBox(body));
       }
       if (view.tab === 'res') { pane.innerHTML = reserved.map(orderCard).join('') || '<p class="hint">Aucune pièce en attente de pose.</p>'; bindOrderCards(pane); }
       if (view.tab === 'in') { pane.innerHTML = incoming.map(orderCard).join('') || '<p class="hint">Aucune commande en cours.</p>'; bindOrderCards(pane); }
@@ -742,8 +754,6 @@ V.settings = () => ({ title: () => '⚙ Réglages & partie', render(body) {
     <div class="row"><button class="warn" data-reset>↺ Nouvelle partie</button></div>
     <div class="group-title">Affichage</div>
     <div class="row"><button data-q="high" class="${QUALITY === 'high' ? 'primary' : ''}">Qualité haute</button><button data-q="low" class="${QUALITY === 'low' ? 'primary' : ''}">Qualité basse (téléphone)</button></div>
-    <div class="group-title">CRM du bureau</div>
-    <div class="row"><input data-crm placeholder="https://…" value="${esc(state.config.crmUrl || '')}"><button data-crmsave>Enregistrer</button></div>
     <div class="err"></div>`;
   const err = errBox(body);
   store.storageInfo().then((s) => { if (s && $('[data-usage]', body)) $('[data-usage]', body).textContent = `Espace utilisé : ${(s.usage / 1e6).toFixed(1)} Mo sur ${(s.quota / 1e6).toFixed(0)} Mo disponibles.`; });
@@ -758,22 +768,12 @@ V.settings = () => ({ title: () => '⚙ Réglages & partie', render(body) {
     await store.newGame(); await refresh_(); toast('Nouvelle partie', 2000);
   };
   $$('[data-q]', body).forEach((b) => b.onclick = () => setQuality(b.dataset.q));
-  $('[data-crmsave]', body).onclick = async () => { await api('PUT', 'config', { crmUrl: $('[data-crm]', body).value.trim() }); await refresh_(); toast('CRM enregistré', 1500); };
 } });
 
 V.tarifs = () => ({ title: () => '💶 Tarifs', render(body) {
   body.innerHTML = (state.tarifs || []).map((g) => `<div class="group-title">${esc(g.groupe)}</div><table class="tarifs">${g.items.map(([l, p]) => `<tr><td>${esc(l)}</td><td>${eur(p)}</td></tr>`).join('')}</table>`).join('')
     + '<p class="hint" style="margin-top:14px">Grille relevée sur les annuaires en ligne (allogarage.fr), à vérifier avec le garage. Travaux spécifiques (distribution, embrayage, joint de culasse) : barèmes constructeurs en MO T2.</p>';
 } });
-
-V.crm = () => ({ title: () => '🖥 CRM de l’entreprise', render(body) {
-  const url = state.config.crmUrl || '';
-  body.innerHTML = `<p class="hint">Le poste du bureau a déjà le CRM du garage. Indique son adresse : le bouton CRM et l'écran du bureau dans la 3D l'ouvriront.</p>
-    <div class="row"><input data-url placeholder="https://… ou http://ip-du-poste:port" value="${esc(url)}"><button class="primary" data-save>Enregistrer</button>${url ? '<button data-open>Ouvrir</button>' : ''}</div><div class="err"></div>`;
-  $('[data-save]', body).onclick = async () => { try { await api('PUT', 'config', { crmUrl: $('[data-url]', body).value.trim() }); await refresh_(); } catch (e) { errBox(body)(e); } };
-  $('[data-open]', body) && ($('[data-open]', body).onclick = () => window.open(url, '_blank', 'noopener'));
-} });
-const openCRM = () => (state.config.crmUrl ? window.open(state.config.crmUrl, '_blank', 'noopener') : open(V.crm()));
 
 V.spot = (sid) => ({ title: () => `🅿 ${esc(spotLabel(sid))}`, render(body) {
   const waiting = active().filter((v) => !v.placeId);
@@ -872,7 +872,6 @@ world.on('pickVehicle', (id) => open(V.vehicle(id)));
 world.on('pickSpot', (id) => open(V.spot(id)));
 world.on('pickVisitor', () => open(V.arrivee()));
 world.on('pickMechanic', (id) => open(V.mechanic(id)));
-world.on('openCRM', openCRM);
 world.on('openStock', () => open(V.stock()));
 world.on('pickNone', () => world.select(null));
 addEventListener('keydown', (e) => { if (e.key === 'Escape' && world.moveMode) stopPlacing(); if (e.key === 'Escape' && world.pickMode) stopPartPlacing(); });
@@ -885,7 +884,6 @@ $('#btn-q').onclick = () => setQuality(QUALITY === 'low' ? 'high' : 'low');
 $('#btn-roof').onclick = () => { const m = ROOF[(ROOF.indexOf(world.roofMode) + 1) % 3]; world.setRoof(m); $('#btn-roof').textContent = ROOF_L[m]; };
 $$('#dock [data-open]').forEach((b) => b.onclick = () => {
   const k = b.dataset.open;
-  if (k === 'crm') return openCRM();
   open(({ arrivee: V.arrivee, vehicles: V.vehicles, clients: V.clients, stock: V.stock, orders: V.orders, mechanics: V.mechanics, tarifs: V.tarifs, settings: V.settings })[k]());
 });
 

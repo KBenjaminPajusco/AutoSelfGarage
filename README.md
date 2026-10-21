@@ -25,7 +25,6 @@ npm run site       # régénère public/site.json depuis data/osm.json
 - **Commandes** : commandée → arrivée (en réserve) → posée sur un véhicule, avec l'historique de chaque pièce.
 - **Mécanos** : planning par jour. Les présents à l'heure courante se baladent dans l'atelier. Le bouton 🕒 simule une heure de journée.
 - **Indicateurs** : voitures prêtes, pièces arrivées, mécanos au travail, café / savon / papier toilette (un clic change le niveau), places occupées.
-- **CRM** : l'adresse du CRM du bureau se règle dans 🖥 CRM. L'écran du bureau dans la 3D l'ouvre aussi.
 
 ## Contenu
 
