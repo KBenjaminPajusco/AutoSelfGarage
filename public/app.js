@@ -17,6 +17,7 @@ const TENUES = ['#1f4e8c', '#2f5d3a', '#8a3b12', '#3a3a3a', '#6b1d1d', '#d35400'
 const DAYS = [['lun', 'Lundi'], ['mar', 'Mardi'], ['mer', 'Mercredi'], ['jeu', 'Jeudi'], ['ven', 'Vendredi'], ['sam', 'Samedi'], ['dim', 'Dimanche']];
 const DAYK = ['dim', 'lun', 'mar', 'mer', 'jeu', 'ven', 'sam'];
 const HORAIRES = [['08:30', '12:30'], ['14:00', '18:45']];
+const APP_VERSION = '2026-10-21 · 5';
 
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
@@ -112,14 +113,13 @@ function progressive(container, steps) {
       if (!d) openNext = false;
     }
   };
-  // texte libre : on attend une pause de frappe (ou Entree, ou la sortie du champ) avant de deplier la suite
+  // texte libre : la suite se deplie des la frappe, mais le curseur reste dans le champ ou l'on ecrit
   const isText = (t) => t.matches('textarea, input:not([type=checkbox]):not([type=radio]):not([type=color]):not([type=file]):not([type=date])');
-  let typing = null;
-  container.addEventListener('input', (e) => { clearTimeout(typing); if (isText(e.target)) typing = setTimeout(() => refresh(false), 900); else refresh(); });
-  container.addEventListener('change', () => { clearTimeout(typing); refresh(); });
+  container.addEventListener('input', (e) => refresh(!isText(e.target)));
+  container.addEventListener('change', (e) => refresh(!isText(e.target)));
   container.addEventListener('keydown', (e) => {
     if (e.key !== 'Enter' || !e.target.matches('input')) return;
-    clearTimeout(typing); refresh();
+    refresh();
     // Entree : on passe au champ de la question suivante
     const fields = $$('.step:not([hidden]) input:not([data-optional]):not([type=file]), .step:not([hidden]) textarea, .step:not([hidden]) select', container);
     const next = fields[fields.indexOf(e.target) + 1];
@@ -792,6 +792,7 @@ V.settings = () => ({ title: () => '⚙ Réglages & partie', render(body) {
     <div class="row"><button class="warn" data-reset>↺ Nouvelle partie</button></div>
     <div class="group-title">Affichage</div>
     <div class="row"><button data-q="high" class="${QUALITY === 'high' ? 'primary' : ''}">Qualité haute</button><button data-q="low" class="${QUALITY === 'low' ? 'primary' : ''}">Qualité basse (téléphone)</button></div>
+    <p class="hint" style="margin-top:14px">Version ${APP_VERSION}</p>
     <div class="err"></div>`;
   const err = errBox(body);
   store.storageInfo().then((s) => { if (s && $('[data-usage]', body)) $('[data-usage]', body).textContent = `Espace utilisé : ${(s.usage / 1e6).toFixed(1)} Mo sur ${(s.quota / 1e6).toFixed(0)} Mo disponibles.`; });
@@ -947,4 +948,9 @@ setInterval(() => { renderIndicators(); syncMechanics(); }, 30000);
 let pending = null; // plusieurs changements d'affilee -> un seul rafraichissement
 store.onChange(() => { if (!pending) pending = requestAnimationFrame(() => { pending = null; refresh_(); }); });
 // hors ligne + installable (ecran d'accueil du telephone)
-if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
+if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+  const hadController = !!navigator.serviceWorker.controller;
+  let reloading = false; // nouvelle version installee : on recharge une fois pour l'utiliser tout de suite
+  navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadController && !reloading) { reloading = true; location.reload(); } });
+  navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then((r) => r.update()).catch(() => {});
+}

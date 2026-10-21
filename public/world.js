@@ -933,6 +933,7 @@ export class World {
       if (p.spotId && !this.spots.get(p.spotId).occupied) return this.emit('pickSpot', p.spotId);
       this.emit('pickNone');
     };
+    this.canvas.addEventListener('touchend', (e) => { if (e.cancelable) e.preventDefault(); }, { passive: false });
     this.canvas.addEventListener('pointerup', up);
     this.canvas.addEventListener('pointercancel', up);
     this.canvas.addEventListener('dblclick', () => { if (this.selected) this.focusVehicle(this.selected); });
