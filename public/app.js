@@ -17,7 +17,7 @@ const TENUES = ['#1f4e8c', '#2f5d3a', '#8a3b12', '#3a3a3a', '#6b1d1d', '#d35400'
 const DAYS = [['lun', 'Lundi'], ['mar', 'Mardi'], ['mer', 'Mercredi'], ['jeu', 'Jeudi'], ['ven', 'Vendredi'], ['sam', 'Samedi'], ['dim', 'Dimanche']];
 const DAYK = ['dim', 'lun', 'mar', 'mer', 'jeu', 'ven', 'sam'];
 const HORAIRES = [['08:30', '12:30'], ['14:00', '18:45']];
-const APP_VERSION = '2026-10-21 · 5';
+const APP_VERSION = '2026-10-21 · 6';
 
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
@@ -79,9 +79,15 @@ function back() { stack.pop(); stack.length ? show() : close(); }
 function close() { stack = []; if (modal.open) modal.close(); world.select(null); }
 $('#m-close').onclick = close; $('#m-back').onclick = back;
 modal.addEventListener('cancel', (e) => { e.preventDefault(); close(); });
-let downOnBackdrop = false; // ne ferme que si le clic commence ET finit hors de la fenetre
-modal.addEventListener('pointerdown', (e) => { downOnBackdrop = e.target === modal; });
-modal.addEventListener('click', (e) => { if (e.target === modal && downOnBackdrop) close(); });
+// Fermeture par clic a cote : seulement un vrai clic sur le fond (hors du cadre de la fenetre, qui commence et finit dehors),
+// et jamais pendant une saisie. Le vide sous un contenu court fait partie de la fenetre (plein ecran sur telephone).
+const outside = (e) => { const r = modal.getBoundingClientRect(); return e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom; };
+let downOutside = false;
+modal.addEventListener('pointerdown', (e) => { downOutside = e.target === modal && outside(e); });
+modal.addEventListener('click', (e) => {
+  const v = stack[stack.length - 1];
+  if (e.target === modal && downOutside && outside(e) && !(v && v.dirty)) close();
+});
 modal.addEventListener('input', () => { const v = stack[stack.length - 1]; if (v) v.dirty = true; });
 
 const toast = (msg, ms) => { const t = $('#toast'); t.hidden = !msg; t.textContent = msg || ''; clearTimeout(toast.t); if (ms) toast.t = setTimeout(() => { t.hidden = true; }, ms); };
