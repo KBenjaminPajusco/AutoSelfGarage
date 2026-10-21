@@ -1,6 +1,6 @@
 // Service worker : l'appli marche hors ligne (atelier sans reseau) et s'installe sur l'ecran d'accueil.
 // Reseau d'abord (pour avoir la derniere version), cache en secours.
-const CACHE = 'garage-v2';
+const CACHE = 'garage-v3';
 const CORE = ['./', 'index.html', 'style.css', 'app.js', 'world.js', 'cars.js', 'people.js', 'toon.js', 'perf.js', 'icons.js', 'store.js',
   'data/seed.js', 'data/catalog.js', 'data/plate.js', 'site.json', 'manifest.json', 'icon.svg',
   'vendor/three.module.js', 'vendor/OrbitControls.js', 'vendor/GLTFLoader.js', 'vendor/BufferGeometryUtils.js'];

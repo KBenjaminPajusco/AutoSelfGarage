@@ -830,14 +830,49 @@ export class World {
       for (const [id, sp] of this.spots) { const d = Math.hypot(sp.def.x - p.x, sp.def.z - p.z); if (d < bd) { bd = d; best = id; } }
       return best;
     };
-    // capture : on doit voir le clic avant OrbitControls pour pouvoir attraper une voiture
+    // Souris : on attrape une voiture en cliquant-glissant. Tactile : appui bref = fiche, appui long = attraper,
+    // deux doigts (zoom / rotation) = jamais de selection. Capture : on doit voir le geste avant OrbitControls.
+    const touches = new Set();
+    let multi = false, hold = null;
+    const cancelHold = () => { if (hold) { clearTimeout(hold.timer); hold = null; } };
+    const startDrag = (id, x, y, pointerId) => {
+      this.drag = { id, start: [x, y], active: false }; this.controls.enabled = false;
+      try { this.canvas.setPointerCapture(pointerId); } catch {}
+    };
+    const cancelDrag = () => {
+      const d = this.drag; if (!d) return;
+      this.drag = null; this.controls.enabled = true; this.canvas.classList.remove('dragging');
+      const ve = this.vehicles.get(d.id);
+      if (ve) {
+        ve.dragging = false;
+        const s = this.spots.get(ve.spotId);
+        if (d.active && s) ve.anim = { from: ve.group.position.clone(), fromYaw: ve.group.rotation.y, to: new THREE.Vector3(s.def.x, 0, s.def.z), toYaw: s.def.yaw, t: 0 };
+      }
+      for (const [, sp] of this.spots) sp.hover = false;
+      this.refreshSpots();
+    };
     this.canvas.addEventListener('pointerdown', (e) => {
+      touches.add(e.pointerId);
+      if (touches.size > 1) { multi = true; cancelHold(); cancelDrag(); return; } // deuxieme doigt : geste de camera
+      multi = false;
       this.down = [e.clientX, e.clientY];
       if (e.button !== 0 || this.moveMode || this.pickMode) return;
       const p = pick(e);
-      if (p.vehicleId) { this.drag = { id: p.vehicleId, start: [e.clientX, e.clientY], active: false }; this.controls.enabled = false; this.canvas.setPointerCapture(e.pointerId); }
+      if (!p.vehicleId) return;
+      if (e.pointerType === 'touch') {
+        const h = { id: p.vehicleId, x: e.clientX, y: e.clientY, pid: e.pointerId };
+        h.timer = setTimeout(() => {
+          if (hold !== h || multi) return;
+          hold = null; startDrag(h.id, h.x, h.y, h.pid);
+          this.drag.active = true; this.canvas.classList.add('dragging');
+          if (navigator.vibrate) navigator.vibrate(25);
+        }, 350);
+        hold = h;
+      } else startDrag(p.vehicleId, e.clientX, e.clientY, e.pointerId);
     }, { capture: true });
     this.canvas.addEventListener('pointermove', (e) => {
+      if (hold && Math.hypot(e.clientX - hold.x, e.clientY - hold.y) > 8) cancelHold(); // le doigt bouge : c'est la camera
+      if (multi) return;
       const d = this.drag;
       if (d) {
         if (!d.active && Math.hypot(e.clientX - d.start[0], e.clientY - d.start[1]) > 6) { d.active = true; this.canvas.classList.add('dragging'); }
@@ -856,7 +891,7 @@ export class World {
         }
         return;
       }
-      if (e.buttons) return;
+      if (e.buttons || e.pointerType === 'touch') return;
       const p = pick(e);
       for (const [id, sp] of this.spots) sp.hover = id === p.spotId;
       this.hoverVehicle = p.vehicleId || null;
@@ -864,7 +899,12 @@ export class World {
       for (const [vid, ve] of this.vehicles) ve.label.el.classList.toggle('hov', vid === this.hoverVehicle);
       this.refreshSpots();
     });
-    this.canvas.addEventListener('pointerup', (e) => {
+    const up = (e) => {
+      touches.delete(e.pointerId);
+      const wasMulti = multi;
+      if (touches.size === 0) multi = false;
+      if (wasMulti || e.type === 'pointercancel') { cancelHold(); cancelDrag(); return; } // geste a deux doigts : aucune selection
+      const tapped = hold && hold.id; cancelHold();
       const d = this.drag;
       if (d) {
         this.drag = null; this.controls.enabled = true; this.canvas.classList.remove('dragging');
@@ -881,6 +921,7 @@ export class World {
         return this.emit('pickVehicle', d.id);
       }
       if (!this.down || Math.hypot(e.clientX - this.down[0], e.clientY - this.down[1]) > 5) return;
+      if (tapped) return this.emit('pickVehicle', tapped); // appui bref sur une voiture
       const p = pick(e);
       if (this.moveMode) { if (p.spotId && !this.spots.get(p.spotId).occupied) this.emit('placeSpot', this.moveMode, p.spotId); else this.emit('cancelMove'); return; }
       if (this.pickMode) { const id = p.vehicleId || (p.spotId && this.spots.get(p.spotId).occupied); return this.emit(id ? 'pickForPart' : 'cancelPick', id); }
@@ -891,7 +932,9 @@ export class World {
       if (p.vehicleId) return this.emit('pickVehicle', p.vehicleId);
       if (p.spotId && !this.spots.get(p.spotId).occupied) return this.emit('pickSpot', p.spotId);
       this.emit('pickNone');
-    });
+    };
+    this.canvas.addEventListener('pointerup', up);
+    this.canvas.addEventListener('pointercancel', up);
     this.canvas.addEventListener('dblclick', () => { if (this.selected) this.focusVehicle(this.selected); });
   }
 

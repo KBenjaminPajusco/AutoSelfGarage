@@ -60,6 +60,10 @@ const parsePlanning = (s) => String(s || '').split(/[,;]+/).map((x) => x.trim().
 
 // ---------------- modale (pile de vues) ----------------
 const modal = $('#modal');
+// tactile : le doigt qui ouvre la fenetre (clic dans la 3D) genere ensuite un clic au meme endroit,
+// qui tomberait sur la fenetre fraichement ouverte (une case de l'inventaire, un bouton…) : on l'ignore
+let openedAt = 0;
+modal.addEventListener('click', (e) => { if (performance.now() - openedAt < 450) { e.stopPropagation(); e.preventDefault(); } }, true);
 let stack = [];
 function open(view, push = false) { if (!push) stack = []; stack.push(view); show(); }
 function show() {
@@ -68,7 +72,7 @@ function show() {
   $('#m-back').style.visibility = stack.length > 1 ? '' : 'hidden';
   const body = $('#m-body'); body.innerHTML = '';
   v.render(body);
-  if (!modal.open) modal.showModal();
+  if (!modal.open) { modal.showModal(); openedAt = performance.now(); }
 }
 function back() { stack.pop(); stack.length ? show() : close(); }
 function close() { stack = []; if (modal.open) modal.close(); world.select(null); }
@@ -92,7 +96,8 @@ function progressive(container, steps) {
     `<div class="step" data-step="${uid}-${s.id}"><label><span class="num">${i + 1}</span>${s.label}</label>${s.html}</div>`).join('')}</div>`);
   const el = (s) => $(`[data-step="${uid}-${s.id}"]`, container);
   steps.forEach((s) => s.bind && s.bind(el(s)));
-  const refresh = () => {
+  // focus = false quand on est encore en train de taper : la suite apparait, mais le curseur ne bouge pas
+  const refresh = (focus = true) => {
     let openNext = true;
     for (const s of steps) {
       const e = el(s), wasHidden = e.hidden, d = !!s.done();
@@ -100,14 +105,27 @@ function progressive(container, steps) {
       if (wasHidden && !e.hidden) {
         // la question qui apparait doit etre visible (sur telephone le clavier cache le bas de l'ecran)
         const f = $('input:not([data-optional]), textarea, select', e);
-        if (f && !f.value) setTimeout(() => f.focus({ preventScroll: true }), 30);
-        setTimeout(() => e.scrollIntoView({ block: 'center', behavior: 'smooth' }), 120);
+        // jamais pendant qu'on est dans un champ (on ne vole pas le curseur)
+        if (focus && f && !f.value) setTimeout(() => { const a = document.activeElement; if (!a || !a.matches('input, textarea, select')) f.focus({ preventScroll: true }); }, 30);
+        setTimeout(() => e.scrollIntoView({ block: 'nearest', behavior: 'smooth' }), 120);
       }
       if (!d) openNext = false;
     }
   };
-  container.addEventListener('input', refresh); container.addEventListener('change', refresh);
-  container.addEventListener('click', () => setTimeout(refresh));
+  // texte libre : on attend une pause de frappe (ou Entree, ou la sortie du champ) avant de deplier la suite
+  const isText = (t) => t.matches('textarea, input:not([type=checkbox]):not([type=radio]):not([type=color]):not([type=file]):not([type=date])');
+  let typing = null;
+  container.addEventListener('input', (e) => { clearTimeout(typing); if (isText(e.target)) typing = setTimeout(() => refresh(false), 900); else refresh(); });
+  container.addEventListener('change', () => { clearTimeout(typing); refresh(); });
+  container.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' || !e.target.matches('input')) return;
+    clearTimeout(typing); refresh();
+    // Entree : on passe au champ de la question suivante
+    const fields = $$('.step:not([hidden]) input:not([data-optional]):not([type=file]), .step:not([hidden]) textarea, .step:not([hidden]) select', container);
+    const next = fields[fields.indexOf(e.target) + 1];
+    if (next) { e.preventDefault(); setTimeout(() => next.focus(), 40); }
+  });
+  container.addEventListener('click', (e) => setTimeout(() => refresh(!isText(e.target))));
   refresh();
   setTimeout(() => { const f = $('.step:not([hidden]) input, .step:not([hidden]) textarea', container); if (f) f.focus(); }, 60);
   return refresh;
@@ -503,7 +521,7 @@ V.client = (id) => {
 const orderCard = (o) => {
   const v = vehicle(o.vehicleId), last = (o.history || []).slice(-1)[0];
   const next = o.statut === 'commandee' ? `<button class="ok" data-arrive="${o.id}">📥 Arrivée</button>`
-    : o.statut === 'arrivee' ? `<select data-pose="${o.id}"><option value="">🔧 Poser sur…</option>${active().map((x) => `<option value="${x.id}" ${x.id === o.vehicleId ? 'selected' : ''}>${esc(x.plaque)} ${esc(x.modele)}</option>`).join('')}</select><button class="ok" data-posego="${o.id}">Posée</button>` : '';
+    : o.statut === 'arrivee' ? `${v ? `<button class="ok" data-posego="${o.id}">✔ Posée sur ${esc(v.plaque)}</button>` : ''}<button class="${v ? '' : 'ok'}" data-pose3d="${o.id}">🔧 ${v ? 'Autre voiture' : 'Poser sur une voiture'}</button>` : '';
   return `<div class="order"><div class="top"><span class="t">${esc(o.libelle)} ${o.qte > 1 ? `× ${esc(o.qte)}` : ''}</span>${obadge(o.statut)}
       ${v ? `<span class="plaque" data-veh="${v.id}" style="cursor:pointer">${esc(v.plaque)}</span>` : '<span class="hint">stock atelier</span>'}</div>
     <div class="row hint" style="margin-top:4px">${esc(o.fournisseur || '')}${o.ref ? ' · réf. ' + esc(o.ref) : ''}${o.prix ? ' · ' + eur(o.prix) : ''}${o.attendueLe && o.statut === 'commandee' ? ' · attendue le ' + fmtD(o.attendueLe) : ''}${last ? ' · ' + fmt(last.at) : ''}</div>
@@ -514,7 +532,13 @@ function bindOrderCards(el) {
   const set = async (id, o) => { try { await api('PATCH', 'orders/' + id, o); await refresh_(); } catch (e) { errBox(el)(e); toast(e.message, 3000); } };
   $$('[data-arrive]', el).forEach((b) => b.onclick = () => set(b.dataset.arrive, { statut: 'arrivee' }));
   $$('[data-opaye]', el).forEach((b) => b.onclick = () => set(b.dataset.opaye, { paye: !state.orders.find((o) => o.id === b.dataset.opaye).paye }));
-  $$('[data-posego]', el).forEach((b) => b.onclick = () => { const vid = $(`[data-pose="${b.dataset.posego}"]`, el).value; set(b.dataset.posego, { statut: 'posee', vehicleId: vid }); });
+  $$('[data-posego]', el).forEach((b) => b.onclick = () => { const o = state.orders.find((x) => x.id === b.dataset.posego); set(o.id, { statut: 'posee', vehicleId: o.vehicleId }); });
+  $$('[data-pose3d]', el).forEach((b) => b.onclick = async () => {
+    const o = state.orders.find((x) => x.id === b.dataset.pose3d);
+    const vid = await pick3D(`où poser « ${o.libelle} »`);
+    if (vid) { try { await api('PATCH', 'orders/' + o.id, { statut: 'posee', vehicleId: vid }); await refresh_(); toast(`${o.libelle} posée sur ${vehicle(vid).plaque}`, 2500); } catch (e) { toast(e.message, 3000); } }
+    reopen();
+  });
   $$('[data-cancel]', el).forEach((b) => b.onclick = () => set(b.dataset.cancel, { statut: 'annulee' }));
   $$('[data-hist]', el).forEach((b) => b.onclick = () => { const t = $(`[data-tl="${b.dataset.hist}"]`, el); t.hidden = !t.hidden; });
   $$('.order [data-veh]', el).forEach((x) => x.onclick = () => open(V.vehicle(x.dataset.veh, 'pieces'), true));
@@ -544,13 +568,18 @@ V.orderNew = (preset = {}) => {
     progressive(body, [
       { id: 'lib', label: 'Pièce', html: `<input data-f placeholder="ex. kit distribution, plaquettes AV, filtre à huile…" value="${esc(d.libelle)}">`, done: () => d.libelle.trim(), bind: (s) => { $('input', s).oninput = (e) => { d.libelle = e.target.value; }; } },
       { id: 'veh', label: 'Pour quel véhicule ?', done: () => d.vehicleId || d.forStock,
-        html: `<select data-v><option value="">— choisir —</option><option value="__stock" ${d.forStock ? 'selected' : ''}>Stock atelier (pas de véhicule)</option>${active().map((v) => `<option value="${v.id}" ${d.vehicleId === v.id ? 'selected' : ''}>${esc(v.plaque)} · ${esc(v.marque)} ${esc(v.modele)} · ${esc(clientName(v.clientId))}</option>`).join('')}</select>`,
-        bind: (s) => { $('select', s).onchange = (e) => { d.forStock = e.target.value === '__stock'; d.vehicleId = d.forStock ? '' : e.target.value; }; } },
-      { id: 'four', label: 'Fournisseur', html: '<input list="dl-four" placeholder="ex. distributeur, concession…">', done: () => d.fournisseur.trim(), bind: (s) => { $('input', s).oninput = (e) => { d.fournisseur = e.target.value; }; } },
+        html: (() => { const v = vehicle(d.vehicleId); return (v ? `<div class="info good row"><span class="plaque">${esc(v.plaque)}</span><b style="flex:1">${esc(v.marque)} ${esc(v.modele)}</b><span class="hint">${esc(clientName(v.clientId))}</span></div>`
+            : d.forStock ? '<div class="info good">🗄 Pour le stock de l’atelier</div>' : '')
+          + `<div class="row" style="margin-top:6px"><button type="button" class="${d.vehicleId || d.forStock ? '' : 'primary'}" data-pick3d>🚗 ${v ? 'Changer de voiture' : 'Choisir la voiture dans le garage'}</button><button type="button" data-forstock>🗄 Stock atelier</button></div>`; })(),
+        bind: (s) => {
+          $('[data-pick3d]', s).onclick = async () => { const vid = await pick3D('pour cette commande'); if (vid) { d.vehicleId = vid; d.forStock = false; } reopen(); };
+          $('[data-forstock]', s).onclick = () => { d.forStock = true; d.vehicleId = ''; show(); };
+        } },
+      { id: 'four', label: 'Fournisseur', html: `<input list="dl-four" placeholder="ex. distributeur, concession…" value="${esc(d.fournisseur)}">`, done: () => d.fournisseur.trim(), bind: (s) => { $('input', s).oninput = (e) => { d.fournisseur = e.target.value; }; } },
       { id: 'qte', label: 'Quantité, prix et référence', done: () => Number(d.qte) > 0,
-        html: '<div class="row"><input type="number" min="1" value="1" data-q style="max-width:90px"><input type="number" step="0.01" placeholder="prix € (facultatif)" data-p><input placeholder="référence (facultatif)" data-r></div>',
+        html: `<div class="row"><input type="number" min="1" value="${esc(d.qte)}" data-q style="max-width:90px"><input type="number" step="0.01" placeholder="prix € (facultatif)" data-p value="${esc(d.prix)}"><input placeholder="référence (facultatif)" data-r value="${esc(d.ref)}"></div>`,
         bind: (s) => { $('[data-q]', s).oninput = (e) => { d.qte = Number(e.target.value); }; $('[data-p]', s).oninput = (e) => { d.prix = e.target.value; }; $('[data-r]', s).oninput = (e) => { d.ref = e.target.value; }; } },
-      { id: 'date', label: 'Arrivée prévue', html: '<input type="date">', done: () => true, bind: (s) => { $('input', s).oninput = (e) => { d.attendueLe = e.target.value; }; } },
+      { id: 'date', label: 'Arrivée prévue', html: `<input type="date" value="${esc(d.attendueLe)}">`, done: () => true, bind: (s) => { $('input', s).oninput = (e) => { d.attendueLe = e.target.value; }; } },
       { id: 'go', label: 'Valider', done: () => false, html: '<button class="primary" data-go>Passer la commande</button><div class="err"></div>',
         bind: (s) => { $('[data-go]', s).onclick = async () => {
           try {
@@ -855,19 +884,29 @@ function startPlacing(id) {
   if (world.camera.position.y < 25) world.view('site');
 }
 function stopPlacing() { world.setMoveMode(null); toast(''); }
-// poser une piece de la reserve : on ferme la fenetre, on montre le garage, on clique la voiture
-let partToPlace = null;
-function startPartPlacing(item) {
-  partToPlace = item; close(); world.setPickMode(item.libelle);
-  toast(`Clique la voiture où poser « ${item.libelle} » — Échap pour annuler`);
+// choisir une voiture dans le garage 3D : la fenetre se cache (sa pile est gardee), on clique la voiture,
+// puis on revient la ou on etait. Renvoie l'id du vehicule, ou null si on annule.
+let pickResolve = null;
+function pick3D(what) {
+  if (pickResolve) pickResolve(null);
+  return new Promise((resolve) => {
+    pickResolve = resolve;
+    if (modal.open) modal.close();
+    world.setPickMode(what);
+    toast(`Clique la voiture ${what} — Échap pour annuler`);
+  });
 }
-function stopPartPlacing() { partToPlace = null; world.setPickMode(null); toast(''); }
-world.on('pickForPart', async (vid) => {
-  const item = partToPlace; stopPartPlacing(); if (!item) return;
-  try { await api('POST', `stock/${item.id}/use`, { vehicleId: vid, qte: 1 }); await refresh_(); toast(`${item.libelle} → ${vehicle(vid).plaque} (stock : ${(state.stock.find((s) => s.id === item.id) || {}).qte})`, 3000); open(V.vehicle(vid, 'travaux')); }
-  catch (e) { toast(e.message, 3000); }
-});
-world.on('cancelPick', stopPartPlacing);
+function endPick(id) { const r = pickResolve; pickResolve = null; world.setPickMode(null); toast(''); if (r) r(id || null); }
+const reopen = () => { if (stack.length) show(); };
+world.on('pickForPart', (vid) => endPick(vid));
+world.on('cancelPick', () => endPick(null));
+// poser une piece de la reserve sur une voiture
+async function startPartPlacing(item) {
+  const vid = await pick3D(`où poser « ${item.libelle} »`);
+  if (!vid) return reopen();
+  try { await api('POST', `stock/${item.id}/use`, { vehicleId: vid, qte: 1 }); await refresh_(); toast(`${item.libelle} → ${vehicle(vid).plaque} (stock : ${(state.stock.find((x) => x.id === item.id) || {}).qte})`, 3000); open(V.vehicle(vid, 'travaux')); }
+  catch (e) { toast(e.message, 3000); reopen(); }
+}
 world.on('placeSpot', async (vid, spotId) => { stopPlacing(); try { await api('POST', `vehicles/${vid}/move`, { placeId: spotId }); await refresh_(); } catch (e) { toast(e.message, 3000); } });
 world.on('cancelMove', stopPlacing);
 world.on('dropVehicle', async (vid, spotId) => {
@@ -884,7 +923,7 @@ world.on('pickMechanic', (id) => open(V.mechanic(id)));
 world.on('openStock', () => open(V.stock()));
 world.on('openOrders', () => open(V.orders('arrivee')));
 world.on('pickNone', () => world.select(null));
-addEventListener('keydown', (e) => { if (e.key === 'Escape' && world.moveMode) stopPlacing(); if (e.key === 'Escape' && world.pickMode) stopPartPlacing(); });
+addEventListener('keydown', (e) => { if (e.key === 'Escape' && world.moveMode) stopPlacing(); if (e.key === 'Escape' && world.pickMode) endPick(null); });
 
 // ---------------- barres ----------------
 $$('#views [data-view]').forEach((b) => b.onclick = () => { $$('#views [data-view]').forEach((x) => x.classList.toggle('on', x === b)); world.view(b.dataset.view); });
