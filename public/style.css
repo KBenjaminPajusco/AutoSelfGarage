@@ -1,6 +1,6 @@
 :root {
   --bg: #15181d; --panel: #1c2027; --panel2: #262b34; --line: #333a46; --text: #e9ebf0; --mute: #9aa3b2;
-  --accent: #e2231a; --accent2: #ff7a00; --ok: #22c55e; --warn: #f59e0b; --bad: #ef4444;
+  --accent: #e8701a; --accent2: #ff7a00; --ok: #22c55e; --warn: #f59e0b; --bad: #ef4444;
   font-family: "Segoe UI", system-ui, sans-serif; font-size: 14px; color: var(--text);
 }
 * { box-sizing: border-box; }
@@ -77,7 +77,7 @@ button { background: var(--panel2); border: 1px solid var(--line); border-radius
 button:hover { border-color: var(--mute); }
 button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
 button.ok { background: #14532d; border-color: #166534; }
-button.warn { background: transparent; border-color: #7f1d1d; color: #fca5a5; }
+button.warn { background: transparent; border-color: #7c3a10; color: #fca5a5; }
 button.ghost { background: transparent; border-color: transparent; }
 button:disabled { opacity: .45; cursor: default; }
 
@@ -138,7 +138,7 @@ button:disabled { opacity: .45; cursor: default; }
 .pay { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 10px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; }
 .pay input, .pay select { width: auto; flex: 0 1 130px; }
 .tag { font-size: 10px; padding: 1px 6px; border-radius: 8px; margin-top: 3px; display: inline-block; }
-.tag.due { background: #7f1d1d; color: #fecaca; } .tag.part { background: #78350f; color: #fde68a; } .tag.paid { background: #14532d; color: #bbf7d0; }
+.tag.due { background: #7c3a10; color: #fecaca; } .tag.part { background: #78350f; color: #fde68a; } .tag.paid { background: #14532d; color: #bbf7d0; }
 .stockrow { display: grid; grid-template-columns: 1fr auto 120px; gap: 10px; align-items: center; padding: 6px 8px; border-radius: 6px; }
 .stockrow:hover { background: var(--panel2); }
 .stockrow.low { box-shadow: inset 3px 0 0 var(--bad); }
@@ -171,7 +171,7 @@ button { font-family: inherit; font-weight: 700; text-transform: uppercase; lett
   box-shadow: inset 0 1px 0 #ffffff4d, inset 0 -2px 0 #00000059, 0 2px 0 #0d0f11, 0 3px 6px #0007; transition: transform .05s; }
 button:hover { border-color: #15181b; filter: brightness(1.12); }
 button:active { transform: translateY(2px); box-shadow: inset 0 2px 5px #000b, 0 0 0 #0d0f11; }
-button.primary { background: linear-gradient(180deg, #e0352b 0%, #b8161c 46%, #9a1015 54%, #bf2023 100%); border-color: #3d0507; }
+button.primary { background: linear-gradient(180deg, #f28a2a 0%, #d86a12 46%, #b8560c 54%, #e0741a 100%); border-color: #4a2003; }
 button.ok { background: linear-gradient(180deg, #3f9a4f 0%, #2a7a39 46%, #21652e 54%, #2f8240 100%); border-color: #0d2a13; }
 button.warn { background: linear-gradient(180deg, #3a2224, #2a1416); color: #ffb4b4; border-color: #5c1a1e; }
 button.ghost { background: transparent; box-shadow: none; border-color: transparent; text-shadow: none; }
@@ -207,10 +207,10 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--hazard); ou
 @keyframes blink { 50% { opacity: .35; } }
 
 /* ---- dock : servante d'atelier rouge, un tiroir par bouton ---- */
-#dock { background: linear-gradient(180deg, #8f1216, #5a0a0d); border: 3px solid #240304; border-radius: 6px; padding: 8px 10px; gap: 7px; backdrop-filter: none;
-  box-shadow: inset 0 2px 0 #e2484d, inset 0 -3px 0 #2a0405, 0 10px 24px #000b; }
-#dock button { background: linear-gradient(180deg, #d32a26 0%, #b3171b 55%, #9b1216 100%); border: 1px solid #3a0607; border-radius: 3px; color: #fff;
-  padding: 8px 14px 16px; font-size: 14px; position: relative; box-shadow: inset 0 1px 0 #ff8a8a66, inset 0 -1px 0 #0006, 0 2px 0 #2a0405; }
+#dock { background: linear-gradient(180deg, #c2570c, #7a3306); border: 3px solid #3a1802; border-radius: 6px; padding: 8px 10px; gap: 7px; backdrop-filter: none;
+  box-shadow: inset 0 2px 0 #ff9a45, inset 0 -3px 0 #3a1802, 0 10px 24px #000b; }
+#dock button { background: linear-gradient(180deg, #f07d1c 0%, #d4650f 55%, #b4540b 100%); border: 1px solid #4a2003; border-radius: 3px; color: #fff;
+  padding: 8px 14px 16px; font-size: 14px; position: relative; box-shadow: inset 0 1px 0 #ffc08a66, inset 0 -1px 0 #0006, 0 2px 0 #3a1802; }
 #dock button::after { content: ""; position: absolute; left: 22%; right: 22%; bottom: 5px; height: 4px; border-radius: 3px;
   background: linear-gradient(180deg, #ffffff, #a5acb3 60%, #6d747b); box-shadow: 0 1px 1px #000a; }
 #dock button.primary { color: #111; text-shadow: 0 1px 0 #fff6; border-color: #111;

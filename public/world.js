@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/OrbitControls.js';
 import { mergeGeometries } from 'three/addons/BufferGeometryUtils.js';
 import { makeVehicle, makeModelVehicle, typeOf } from './cars.js';
-import { toonify, OutlineRenderer, NO_OUTLINE } from './toon.js';
+import { toonify, toonMaterial, OutlineRenderer, NO_OUTLINE } from './toon.js';
 import { makePerson, animatePerson, Walker } from './people.js';
 import { LOW, mergeStatic } from './perf.js';
 import { assetUrl } from './store.js';
@@ -126,15 +126,15 @@ const noOutline = (o) => { o.layers.set(NO_OUTLINE); return o; };
 // Une allee centrale de la porte au fond (v = 9) et des branches vers les postes de travail.
 const NAV = {
   D: [18.8, 9], S2: [15.8, 9], S3: [13.07, 9], S4: [10.0, 9], S5: [6.5, 9], S6: [4.85, 9], S7: [2.2, 9],
-  OF: [15.8, 5.0], ST: [20.35, 6.2], STT: [20.35, 1.05, 2.9], LND: [20.35, 0.6, 2.9], PR: [18.6, 0.6, 2.9], PRC: [17.0, 1.25, 2.9], PRT: [14.2, 2.6, 2.9],
+  OF: [15.8, 5.0], ST: [17.57, 6.3], STT: [17.57, 1.05, 2.9], LND: [17.57, 0.6, 2.9], PR: [16.2, 0.6, 2.9], PRC: [14.5, 1.25, 2.9], PRT: [14.2, 3.4, 2.9], OSH: [19.7, 5.8],
   RS: [13.07, 15.0], RSI: [13.07, 17.8], TI: [12.3, 6.4], P1S: [5.0, 5.0], P1U: [2.5, 5.0], P23A: [4.85, 14.0], P23B: [4.85, 18.4], P2U: [2.7, 18.4],
   P3E: [10.05, 14.6], P3F: [10.05, 18.4], P3U: [7.5, 18.4], WB: [1.6, 10.8], OIL: [1.35, 13.2], A1S: [7.6, 12.7], A2S: [6.5, 6.0],
 };
-const NAV_EDGES = 'D-S2 S2-S3 S3-S4 S4-S5 S5-S6 S6-S7 S2-OF D-ST ST-STT STT-LND LND-PR PR-PRC PRC-PRT S3-RS RS-RSI S3-TI S6-P1S P1S-P1U S6-P23A P23A-P23B P23B-P2U '
+const NAV_EDGES = 'D-S2 S2-S3 S3-S4 S4-S5 S5-S6 S6-S7 S2-OF D-ST ST-STT STT-LND LND-PR PR-PRC PR-PRT D-OSH S3-RS RS-RSI S3-TI S6-P1S P1S-P1U S6-P23A P23A-P23B P23B-P2U '
   + 'S4-P3E P3E-P3F P3F-P3U S7-WB S7-OIL P23A-A1S A1S-P3E S5-A2S';
 // postes ou l'on travaille sur la voiture d'une place, et ce qu'on regarde
 const SPOT_WORK = { P1: ['P1U', 'P1S'], P2: ['P2U', 'P23B'], P3: ['P3U', 'P3F'], A1: ['A1S'], A2: ['A2S'] };
-const IDLE_POIS = [['WB', 0], ['OIL', 0], ['TI', -Math.PI / 2], ['RSI', Math.PI / 2], ['OF', -Math.PI / 2], ['PRC', -Math.PI / 2], ['PRT', 0], ['P1S', Math.PI], ['P3E', Math.PI / 2]];
+const IDLE_POIS = [['OSH', Math.PI / 2], ['WB', 0], ['OIL', 0], ['TI', -Math.PI / 2], ['RSI', Math.PI / 2], ['OF', -Math.PI / 2], ['PRC', -Math.PI / 2], ['PRT', 0], ['P1S', Math.PI], ['P3E', Math.PI / 2]];
 
 export class World {
   constructor(canvas, labelsEl) {
@@ -205,7 +205,7 @@ export class World {
     this.buildGarage(g); this.buildSpots(site); this.buildVisitor(g);
     toonify(this.scene);
     const moving = new Set([...this.lifts.values()].map((l) => l.car));
-    const a = mergeStatic(this.garage, (o) => o === this.roofGarage || moving.has(o) || o.userData.stock);
+    const a = mergeStatic(this.garage, (o) => o === this.roofGarage || moving.has(o) || o.userData.stock || o.userData.orders || o === this.orderShelf.group);
     const b = mergeStatic(this.roofGarage);
     const c = mergeStatic(this.scene, (o) => o === this.garage || o === this.visitor);
     console.info(`[perf] maillages fusionnes : atelier ${a.before}→${a.after}, toit ${b.before}→${b.after}, site ${c.before}→${c.after}`);
@@ -396,10 +396,13 @@ export class World {
     }
     // ---- bureau (a gauche en entrant, contre la facade SO) ----
     const O = I.office, wallH = 2.75, t = 0.12, SDo = I.sideDoor;
-    box(O.u0, O.u0 + t, 0.2, O.v1, 0, 0.9, plaster); box(O.u0, O.u0 + t, 0.2, O.v1, 2.2, wallH, plaster);          // vitre sur l'atelier
-    noOutline(box(O.u0 + 0.02, O.u0 + 0.04, 0.2, O.v1, 0.9, 2.2, glass));
+    box(O.u0, O.u0 + t, 0.2, O.v1, 0, wallH, plaster);                                                            // mur plein cote atelier
     const odu = O.u1 - 1.6;                                                                                          // porte cote entree
-    box(O.u0, odu, O.v1 - t, O.v1, 0, wallH, plaster); box(odu + 0.9, O.u1, O.v1 - t, O.v1, 0, wallH, plaster); box(odu, odu + 0.9, O.v1 - t, O.v1, 2.1, wallH, plaster);
+    const wa = O.u0 + 0.8, wb = odu - 0.4;                                                                          // vitre sur l'entree
+    box(O.u0, wa, O.v1 - t, O.v1, 0, wallH, plaster); box(wb, odu, O.v1 - t, O.v1, 0, wallH, plaster);
+    box(wa, wb, O.v1 - t, O.v1, 0, 0.9, plaster); box(wa, wb, O.v1 - t, O.v1, 2.2, wallH, plaster);
+    noOutline(box(wa, wb, O.v1 - 0.07, O.v1 - 0.05, 0.9, 2.2, glass));
+    box(odu + 0.9, O.u1, O.v1 - t, O.v1, 0, wallH, plaster); box(odu, odu + 0.9, O.v1 - t, O.v1, 2.1, wallH, plaster);
     box(SDo.u0 - 0.6, SDo.u1 + 0.6, 1.1, 1.8, 0, 1.05, M('#5b4c3e'));                                                // comptoir face a la porte clients
     box(SDo.u0 - 0.7, SDo.u1 + 0.7, 1.0, 1.9, 1.05, 1.1, wood);
     const du = O.u0 + 0.5;
@@ -408,6 +411,7 @@ export class World {
     at(screen, du + 1, 0.98, 3.28, Math.PI);
     box(du + 0.97, du + 1.03, 3.2, 3.3, 0.76, 0.8, black);
     const chair = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.25, 0.08, 12), black); at(chair, du + 1, 0.48, 2.3);
+    box(O.u1 - t, O.u1, 0.2, O.v1, 0, wallH, plaster);                                                            // mur cote escalier
     box(O.u1 - 0.5, O.u1 - 0.15, 2.4, 4.0, 0, 1.9, M('#7c8a99'));                                                  // armoire a classeurs
     this.addLabel('<b>Bureau</b>', this.uv((O.u0 + O.u1) / 2, (O.v0 + O.v1) / 2, 2.4), 'zone', 50);
     // ---- toilettes ----
@@ -415,6 +419,7 @@ export class World {
     box(Tt.u0, Tt.u0 + t, 0.2, Tt.v1, 0, wallH, tile);
     box(Tt.u0, tdu, Tt.v1 - t, Tt.v1, 0, wallH, tile); box(tdu + 0.8, Tt.u1, Tt.v1 - t, Tt.v1, 0, wallH, tile); box(tdu, tdu + 0.8, Tt.v1 - t, Tt.v1, 2.1, wallH, tile);
     box(Tt.u1 - t, Tt.u1, 0.2, Tt.v1, 0, wallH, tile);
+    box(Tt.u0, Tt.u1, 0.2, Tt.v1, wallH, wallH + 0.05, tile); // plafond des WC
     box(tdu, tdu + 0.8, Tt.v1 - 0.09, Tt.v1 - 0.05, 0, 2.1, M('#5d6d7e'));
     const wc = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.17, 0.42, 14), white); at(wc, Tt.u1 - 0.75, 0.21, 1.2);
     box(Tt.u1 - 0.45, Tt.u1 - 0.25, 0.95, 1.45, 0.42, 0.85, white);
@@ -423,7 +428,15 @@ export class World {
       pq: this.addLabel('', this.uv(Tt.u1 - 0.75, 1.2, 2.3), 'cons', 70),
       savon: this.addLabel('', this.uv(Tt.u0 + 0.5, 0.5, 2.3), 'cons', 70),
     };
-    // ---- escalier (le long du mur d'entree) + etage : salle de pause ----
+    // ---- etagere des commandes arrivees (en face des WC) : un carton par commande, clic = liste ----
+    const OS = I.orderShelf, rackG = M('#4a4f57', { metalness: 0.5 }), plank = M('#7b6a55');
+    for (const u of [OS.u0, OS.u1 - 0.06]) for (const v of [OS.v0, OS.v1 - 0.06]) box(u, u + 0.06, v, v + 0.06, 0, 2.1, rackG);
+    for (const y of [0.15, 0.8, 1.45, 2.05]) box(OS.u0, OS.u1, OS.v0, OS.v1, y - 0.04, y, plank);
+    const osHit = noOutline(box(OS.u0, OS.u1, OS.v0 - 0.1, OS.v1 + 0.1, 0, 2.2, new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false })));
+    osHit.castShadow = osHit.receiveShadow = false; osHit.userData.orders = true; this.ordersHit = osHit;
+    this.orderShelf = { def: OS, group: new THREE.Group() }; grp.add(this.orderShelf.group);
+    this.orderLabel = this.addLabel('<b>📦 Commandes</b>', this.uv((OS.u0 + OS.u1) / 2, (OS.v0 + OS.v1) / 2, 2.6), 'zone', 50);
+    // ---- escalier (entre le bureau et les WC) + etage : salle de pause ----
     const Z = I.stairs, MZ = I.mezz, n = 16, rise = MZ.h / n, run = (Z.vFoot - Z.vTop) / n;
     for (let i = 0; i < n; i++) {
       const v1 = Z.vFoot - i * run, v0 = v1 - run, y = (i + 1) * rise;
@@ -436,26 +449,27 @@ export class World {
     }
     const rail = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, strLen), M('#f2c200'));
     rail.position.set(Z.u0 - 0.03, MZ.h / 2 + 1.0, -(Z.vFoot + Z.vTop) / 2); rail.rotation.x = -Math.atan2(MZ.h, Z.vFoot - Z.vTop); grp.add(rail);
-    // plancher de la mezzanine (tremie au-dessus de l'escalier)
-    box(MZ.u0, Z.u0, MZ.v0 + 0.2, MZ.v1, MZ.h - 0.15, MZ.h, M('#7a6a58'));
-    box(Z.u0, MZ.u1 - 0.2, MZ.v0 + 0.2, Z.vTop, MZ.h - 0.15, MZ.h, M('#7a6a58'));
-    box(MZ.u0, MZ.u1 - 0.2, MZ.v1 - 0.25, MZ.v1, MZ.h - 0.45, MZ.h - 0.15, M('#3d3d3d', { metalness: 0.5 })); // poutre de rive
-    for (const u of [MZ.u0 + 0.1, (MZ.u0 + Z.u0) / 2]) box(u - 0.1, u + 0.1, MZ.v1 - 0.2, MZ.v1, 0, MZ.h - 0.45, M('#3d3d3d'));
-    // salle de pause : murs avec grandes vitres sur l'atelier
-    const y0 = MZ.h, y1 = MZ.h + 2.4, pr = { u0: MZ.u0, u1: Z.u0, v0: 0.2, v1: MZ.v1 };
+    // plancher de l'etage : au-dessus du bureau seulement, + le palier en haut de l'escalier
+    box(MZ.u0, MZ.u1, MZ.v0 + 0.2, MZ.v1, MZ.h - 0.15, MZ.h, M('#7a6a58'));
+    box(Z.u0, Z.u1, MZ.v0 + 0.2, Z.vTop, MZ.h - 0.15, MZ.h, M('#7a6a58')); // palier
+    box(Z.u1, Z.u1 + 0.06, MZ.v0 + 0.2, Z.vTop, MZ.h, MZ.h + 1.0, M('#f2c200')); // garde-corps du palier (cote WC)
+    box(MZ.u0, MZ.u1, MZ.v1 - 0.25, MZ.v1, MZ.h - 0.45, MZ.h - 0.15, M('#3d3d3d', { metalness: 0.5 })); // poutre de rive
+    for (const u of [MZ.u0 + 0.1, (MZ.u0 + MZ.u1) / 2]) box(u - 0.1, u + 0.1, MZ.v1 - 0.2, MZ.v1, 0, MZ.h - 0.45, M('#3d3d3d'));
+    // salle de pause au-dessus du bureau : grandes vitres sur l'atelier, porte sur le palier
+    const y0 = MZ.h, y1 = MZ.h + 2.4, pr = { u0: MZ.u0, u1: MZ.u1, v0: 0.2, v1: MZ.v1 };
     const wallWin = (u0, u1, v0, v1) => { box(u0, u1, v0, v1, y0, y0 + 1.0, plaster); noOutline(box(u0, u1, v0, v1, y0 + 1.0, y1 - 0.3, glass)); box(u0, u1, v0, v1, y1 - 0.3, y1, plaster); };
     wallWin(pr.u0, pr.u1, pr.v1 - t, pr.v1); wallWin(pr.u0, pr.u0 + t, pr.v0, pr.v1);
-    box(pr.u1 - t, pr.u1, Z.vTop + 0.1, pr.v1, y0, y1, plaster); box(pr.u1 - t, pr.u1, pr.v0, 0.25, y0, y1, plaster); // ouverture sur le palier
-    box(pr.u0, MZ.u1 - 0.2, pr.v0, pr.v1, y1, y1 + 0.06, plaster);
-    box(Z.u0, MZ.u1 - 0.2, Z.vTop - 0.04, Z.vTop, y0, y0 + 1.0, M('#f2c200'));  // garde-corps du palier
+    box(pr.u1 - t, pr.u1, Z.vTop, pr.v1, y0, y1, plaster); box(pr.u1 - t, pr.u1, pr.v0, Z.vTop, y0 + 2.1, y1, plaster); // porte vers le palier
+    box(pr.u0, pr.u1, pr.v0, pr.v1, y1, y1 + 0.06, plaster);
     box(pr.u0 + 2.4, pr.u0 + 4.4, 1.6, 2.8, y0 + 0.72, y0 + 0.76, M('#d9cbb0')); box(pr.u0 + 3.35, pr.u0 + 3.45, 2.15, 2.25, y0, y0 + 0.72, black); // table
     for (const [a, b] of [[pr.u0 + 2.1, 2.2], [pr.u0 + 4.7, 2.2], [pr.u0 + 3.4, 1.2], [pr.u0 + 3.4, 3.2]]) { const st = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.45, 12), M('#c0392b')); at(st, a, y0 + 0.23, b); }
     box(pr.u0 + 0.2, pr.u0 + 1.0, 0.6, 3.2, y0, y0 + 0.45, M('#35557a')); box(pr.u0 + 0.15, pr.u0 + 0.35, 0.6, 3.2, y0 + 0.45, y0 + 0.95, M('#35557a')); // canape
-    box(pr.u1 - 3.6, pr.u1 - 0.4, 0.25, 0.85, y0, y0 + 0.9, M('#e8e2d6')); box(pr.u1 - 3.65, pr.u1 - 0.35, 0.2, 0.9, y0 + 0.9, y0 + 0.95, M('#5b4c3e')); // plan de travail
-    const cafeU = pr.u1 - 2.4;
+    const kit = pr.u1 - 3.1; // coin cuisine contre la facade, pres de la porte
+    box(kit, pr.u1 - 0.9, 0.25, 0.85, y0, y0 + 0.9, M('#e8e2d6')); box(kit - 0.05, pr.u1 - 0.85, 0.2, 0.9, y0 + 0.9, y0 + 0.95, M('#5b4c3e')); // plan de travail
+    const cafeU = kit + 0.5;
     box(cafeU - 0.18, cafeU + 0.18, 0.3, 0.7, y0 + 0.95, y0 + 1.4, M('#1f1f1f')); box(cafeU - 0.06, cafeU + 0.06, 0.66, 0.72, y0 + 1.25, y0 + 1.33, M('#c0c0c0')); // machine a cafe
-    box(pr.u1 - 1.4, pr.u1 - 0.7, 0.3, 0.75, y0 + 0.95, y0 + 1.33, M('#d0d0d0')); // micro-ondes
-    box(pr.u1 - 1.0, pr.u1 - 0.3, pr.v1 - 0.9, pr.v1 - 0.2, y0, y0 + 1.75, white); // frigo
+    box(cafeU + 0.6, cafeU + 1.3, 0.3, 0.75, y0 + 0.95, y0 + 1.33, M('#d0d0d0')); // micro-ondes
+    box(pr.u1 - 0.8, pr.u1 - 0.15, pr.v1 - 0.9, pr.v1 - 0.2, y0, y0 + 1.75, white); // frigo
     this.consLabels.cafe = this.addLabel('', this.uv(cafeU, 0.5, y0 + 1.9), 'cons', 70);
     this.addLabel('<b>Salle de pause</b><small>à l’étage</small>', this.uv((pr.u0 + pr.u1) / 2, 2.2, y1 + 0.6), 'zone', 60);
     // ---- reserve (a droite en entrant) ----
@@ -506,13 +520,13 @@ export class World {
     const comp = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, 1.3, 16), M('#c62828', { metalness: 0.5, roughness: 0.4 }));
     comp.rotation.x = Math.PI / 2; at(comp, 0.7, 0.45, 14.75).castShadow = true;
     for (const [u, v, c] of [[9.6, 15.2, '#1565c0'], [10.2, 15.25, '#2e7d32']]) { const f = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 0.88, 14), M(c, { metalness: 0.4 })); at(f, u, 0.44, v).castShadow = true; }
-    const ext = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.55, 10), red); at(ext, W - 0.35, 1.2, I.door.v0 - 0.4);
+    const ext = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.55, 10), red); at(ext, W - 0.35, 1.2, I.door.v1 + 0.5);
     // ---- poster du Mans (mur en tole de l'entree, cote interieur) ----
     const poster = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 2.25), new THREE.MeshStandardMaterial({ map: TEX.poster(), roughness: 0.6 }));
     at(poster, W - 0.215, 2.6, I.poster.v, -Math.PI / 2);
     // ---- eclairage (reglettes), sauf au-dessus de la mezzanine ----
     const tube = new THREE.MeshStandardMaterial({ color: '#ffffff', emissive: '#f4f8ff', emissiveIntensity: 2 });
-    for (let u = 4; u < W; u += 6) for (let v = 3; v < I.len - 1; v += 5) if (!(u > MZ.u0 - 0.5 && v < MZ.v1 + 0.8)) box(u - 0.08, u + 0.08, v - 0.8, v + 0.8, 5.2, 5.28, tube);
+    for (let u = 4; u < W; u += 6) for (let v = 3; v < I.len - 1; v += 5) if (!(u > MZ.u0 - 0.5 && u < MZ.u1 + 0.5 && v < MZ.v1 + 0.8)) box(u - 0.08, u + 0.08, v - 0.8, v + 0.8, 5.2, 5.28, tube);
     // ---- marquage au sol : allee de circulation, de la porte au fond ----
     const yellow = M('#e8b923', { roughness: 0.6 });
     for (const v of [I.door.v0 - 0.1, I.door.v1 + 0.1]) box(4.5, W - 0.4, v - 0.05, v + 0.05, 0.03, 0.035, yellow);
@@ -634,6 +648,7 @@ export class World {
     }
     const arrived = (state.orders || []).filter((o) => o.statut === 'arrivee').length;
     const low = (state.stock || []).filter((s) => Number(s.qte) <= Number(s.seuil || 0)).length;
+    this.fillOrderShelf((state.orders || []).filter((o) => o.statut === 'arrivee'));
     this.stockLabel.el.innerHTML = `<b>Réserve</b><small>clic : inventaire${arrived ? ` · ${arrived} arrivée${arrived > 1 ? 's' : ''}` : ''}${low ? ` · ⚠ ${low} bas` : ''}</small>`;
     this.refreshSpots();
     this.updateSelectionRing();
@@ -669,6 +684,24 @@ export class World {
     if (e) { const d = e.group.userData.dims; this.ring.scale.set(d.L * 0.62, 1, d.L * 0.62); }
   }
 
+  // un carton par commande arrivee sur l'etagere en face des WC (3 niveaux, jusqu'a 4 cartons par niveau)
+  fillOrderShelf(list) {
+    const sh = this.orderShelf; if (!sh) return;
+    sh.group.clear();
+    const OS = sh.def, cols = 4, tapes = ['#c0392b', '#2e6fd8', '#1e7d4a', '#f2c200'];
+    const alongV = OS.v1 - OS.v0 > OS.u1 - OS.u0, len = alongV ? OS.v1 - OS.v0 : OS.u1 - OS.u0, depth = (alongV ? OS.u1 - OS.u0 : OS.v1 - OS.v0) * 0.85, w = len / cols;
+    list.slice(0, cols * 3).forEach((o, i) => {
+      const lvl = Math.floor(i / cols), t = w * (i % cols) + w / 2, y = [0.15, 0.8, 1.45][lvl], hh = 0.3 + (i * 37 % 5) * 0.04;
+      const u = alongV ? (OS.u0 + OS.u1) / 2 : OS.u0 + t, v = alongV ? OS.v0 + t : (OS.v0 + OS.v1) / 2;
+      const [sx, sz] = alongV ? [depth, w * 0.8] : [w * 0.8, depth];
+      const b = new THREE.Mesh(new THREE.BoxGeometry(sx, hh, sz), toonMaterial(M('#c49a6c')));
+      b.position.set(u, y + hh / 2, -v); b.castShadow = true;
+      const tape = new THREE.Mesh(new THREE.BoxGeometry(sx * 1.02, 0.05, sz * 1.02), toonMaterial(M(tapes[i % 4])));
+      tape.position.set(u, y + hh * 0.6, -v);
+      sh.group.add(b, tape);
+    });
+    this.orderLabel.el.innerHTML = `<b>📦 Commandes</b><small>${list.length ? `${list.length} arrivée${list.length > 1 ? 's' : ''} · clic` : 'rien en attente'}</small>`;
+  }
   setPickMode(label) { this.pickMode = label || null; this.canvas.classList.toggle('placing', !!label); for (const [, e] of this.vehicles) e.label.el.classList.toggle('target', !!label); this.dirty = true; }
   setMoveMode(vehicleId) { this.moveMode = vehicleId || null; this.canvas.classList.toggle('placing', !!vehicleId); this.refreshSpots(); }
 
@@ -786,10 +819,11 @@ export class World {
       const objs = [...[...this.vehicles.values()].map((e) => e.group), ...[...this.mechanics.values()].map((m) => m.walker.p)];
       if (this.visitor) objs.push(this.visitor);
       if (this.stockHit) objs.push(this.stockHit);
+      if (this.ordersHit) objs.push(this.ordersHit);
       const h = this.raycaster.intersectObjects(objs, true)[0];
       const hs = this.raycaster.intersectObjects([...this.spots.values()].map((s) => s.hit), false)[0];
       const u = h && h.object.userData;
-      return { vehicleId: u && u.vehicleId, mechanicId: u && u.mechanicId, visitor: u && u.visitor, stock: u && u.stock, spotId: hs && hs.object.userData.spotId };
+      return { vehicleId: u && u.vehicleId, mechanicId: u && u.mechanicId, visitor: u && u.visitor, stock: u && u.stock, orders: u && u.orders, spotId: hs && hs.object.userData.spotId };
     };
     const nearestSpot = (p) => {
       let best = null, bd = 3.2;
@@ -826,7 +860,7 @@ export class World {
       const p = pick(e);
       for (const [id, sp] of this.spots) sp.hover = id === p.spotId;
       this.hoverVehicle = p.vehicleId || null;
-      this.canvas.style.cursor = p.vehicleId ? 'grab' : p.visitor || p.stock || p.mechanicId || (p.spotId && !this.spots.get(p.spotId).occupied) ? 'pointer' : '';
+      this.canvas.style.cursor = p.vehicleId ? 'grab' : p.visitor || p.stock || p.orders || p.mechanicId || (p.spotId && !this.spots.get(p.spotId).occupied) ? 'pointer' : '';
       for (const [vid, ve] of this.vehicles) ve.label.el.classList.toggle('hov', vid === this.hoverVehicle);
       this.refreshSpots();
     });
@@ -852,6 +886,7 @@ export class World {
       if (this.pickMode) { const id = p.vehicleId || (p.spotId && this.spots.get(p.spotId).occupied); return this.emit(id ? 'pickForPart' : 'cancelPick', id); }
       if (p.visitor) return this.emit('pickVisitor');
       if (p.stock) return this.emit('openStock');
+      if (p.orders) return this.emit('openOrders');
       if (p.mechanicId) return this.emit('pickMechanic', p.mechanicId);
       if (p.vehicleId) return this.emit('pickVehicle', p.vehicleId);
       if (p.spotId && !this.spots.get(p.spotId).occupied) return this.emit('pickSpot', p.spotId);

@@ -84,17 +84,25 @@ const errBox = (el) => (e) => { const b = $('.err', el); if (b) b.textContent = 
 
 // ---------------- formulaire progressif ----------------
 // steps : [{ id, label, html, done: () => bool, bind?: (stepEl) => void }]
+let progressiveSeq = 0;
 function progressive(container, steps) {
+  // identifiants uniques : un formulaire peut en contenir un autre (creation du client dans l'arrivee)
+  const uid = `p${++progressiveSeq}`;
   container.insertAdjacentHTML('beforeend', `<div class="steps">${steps.map((s, i) =>
-    `<div class="step" data-step="${s.id}"><label><span class="num">${i + 1}</span>${s.label}</label>${s.html}</div>`).join('')}</div>`);
-  const el = (s) => $(`[data-step="${s.id}"]`, container);
+    `<div class="step" data-step="${uid}-${s.id}"><label><span class="num">${i + 1}</span>${s.label}</label>${s.html}</div>`).join('')}</div>`);
+  const el = (s) => $(`[data-step="${uid}-${s.id}"]`, container);
   steps.forEach((s) => s.bind && s.bind(el(s)));
   const refresh = () => {
     let openNext = true;
     for (const s of steps) {
       const e = el(s), wasHidden = e.hidden, d = !!s.done();
       e.hidden = !openNext; e.classList.toggle('done', d);
-      if (wasHidden && !e.hidden) { const f = $('input, textarea, select', e); if (f && !f.value) setTimeout(() => f.focus(), 30); }
+      if (wasHidden && !e.hidden) {
+        // la question qui apparait doit etre visible (sur telephone le clavier cache le bas de l'ecran)
+        const f = $('input:not([data-optional]), textarea, select', e);
+        if (f && !f.value) setTimeout(() => f.focus({ preventScroll: true }), 30);
+        setTimeout(() => e.scrollIntoView({ block: 'center', behavior: 'smooth' }), 120);
+      }
       if (!d) openNext = false;
     }
   };
@@ -136,8 +144,9 @@ function clientPicker(el, getId, setId) {
       progressive(inner, [
         { id: 'nom', label: 'Nom (ou société)', html: `<input data-f="nom" value="${esc(d.nom)}">`, done: () => d.nom.trim(), bind: (s) => { $('input', s).oninput = (e) => { d.nom = e.target.value; }; } },
         { id: 'prenom', label: 'Prénom', html: `<input data-f="prenom" value="${esc(d.prenom)}" placeholder="facultatif pour une société">`, done: () => d.prenom.trim() || d.tel, bind: (s) => { $('input', s).oninput = (e) => { d.prenom = e.target.value; }; } },
-        { id: 'tel', label: 'Téléphone', html: `<input data-f="tel" value="${esc(d.tel)}" inputmode="tel">`, done: () => d.tel.replace(/\D/g, '').length >= 9, bind: (s) => { $('input', s).oninput = (e) => { d.tel = e.target.value; }; } },
-        { id: 'go', label: 'E-mail (facultatif)', html: `<input data-f="email" type="email"><div class="row" style="margin-top:6px"><button type="button" class="primary" data-save>Créer le client</button><button type="button" data-cancel>Annuler</button></div><div class="err"></div>`,
+        { id: 'tel', label: 'Téléphone', html: `<input data-f="tel" value="${esc(d.tel)}" inputmode="tel" enterkeyhint="done" placeholder="06 12 34 56 78">`, done: () => d.tel.replace(/\D/g, '').length >= 9,
+          bind: (s) => { const i = $('input', s); i.oninput = (e) => { d.tel = e.target.value; }; i.onkeydown = (e) => { if (e.key === 'Enter' && d.tel.replace(/\D/g, '').length >= 9) $('[data-save]', box).click(); }; } },
+        { id: 'go', label: 'Valider', html: `<div class="row"><button type="button" class="primary" data-save style="flex:1;padding:12px">✔ Créer ce client et continuer</button><button type="button" data-cancel>Annuler</button></div><input data-f="email" data-optional type="email" placeholder="e-mail (facultatif)" style="margin-top:6px"><div class="err"></div>`,
           done: () => false, bind: (s) => {
             $('input', s).oninput = (e) => { d.email = e.target.value; };
             $('[data-cancel]', s).onclick = () => draw();
@@ -873,6 +882,7 @@ world.on('pickSpot', (id) => open(V.spot(id)));
 world.on('pickVisitor', () => open(V.arrivee()));
 world.on('pickMechanic', (id) => open(V.mechanic(id)));
 world.on('openStock', () => open(V.stock()));
+world.on('openOrders', () => open(V.orders('arrivee')));
 world.on('pickNone', () => world.select(null));
 addEventListener('keydown', (e) => { if (e.key === 'Escape' && world.moveMode) stopPlacing(); if (e.key === 'Escape' && world.pickMode) stopPartPlacing(); });
 

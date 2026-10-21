@@ -7,6 +7,6 @@
   "display": "fullscreen",
   "orientation": "any",
   "background_color": "#15181d",
-  "theme_color": "#b8161c",
+  "theme_color": "#d86a12",
   "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
 }

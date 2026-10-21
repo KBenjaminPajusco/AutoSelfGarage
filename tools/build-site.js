@@ -47,6 +47,8 @@ const rectFromSketch = (x0, x1, y0, y1) => {
   const [ua, va] = fromSketch(x0, y0), [ub, vb] = fromSketch(x1, y1);
   return { u0: r2(Math.min(ua, ub)), u1: r2(Math.max(ua, ub)), v0: r2(Math.min(va, vb)), v1: r2(Math.max(va, vb)) };
 };
+// en entrant a gauche : bureau, puis l'escalier de l'etage, puis les WC contre le mur d'entree
+const OFFICE = shiftU(rectFromSketch(0.0, 0.19, 0.58, 0.87), -1.4);
 const interior = {
   len: GARAGE_LEN,
   lifts: [
@@ -55,12 +57,14 @@ const interior = {
     { id: 'P3', name: 'Pont 3', ...rectFromSketch(0.68, 0.917, 0.28, 0.43) },
   ],
   // bureau + WC decales de 1.4 m vers le fond pour laisser l'escalier contre le mur d'entree
-  office: shiftU(rectFromSketch(0.0, 0.19, 0.58, 0.87), -1.4),
-  toilets: shiftU(rectFromSketch(0.0, 0.18, 0.87, 1.0), -1.4),
-  // escalier droit le long du mur d'entree : pied cote allee (v = 5.6), arrivee au palier (v = 1.0)
-  stairs: { u0: 19.75, u1: 20.95, vFoot: 5.6, vTop: 1.0 },
-  // etage (mezzanine) au-dessus du bureau et des WC : salle de pause
-  mezz: { u0: 10.84, u1: BUILDING_W, v0: 0, v1: 4.4, h: 2.9 },
+  office: OFFICE,
+  // escalier droit entre le bureau et les WC : pied cote atelier (v = 5.6), arrivee a l'etage (v = 1.0)
+  stairs: { u0: r2(OFFICE.u1 + 0.02), u1: r2(OFFICE.u1 + 1.22), vFoot: 5.6, vTop: 1.0 },
+  toilets: { u0: r2(OFFICE.u1 + 1.24), u1: r2(BUILDING_W - 0.16), v0: 0, v1: OFFICE.v1 - 0.23 },
+  // etagere des commandes arrivees : contre le mur de l'entree, en face des WC, avant la porte
+  orderShelf: { u0: r2(BUILDING_W - 0.65), u1: r2(BUILDING_W - 0.2), v0: 4.6, v1: 7.0 },
+  // etage au-dessus du bureau : salle de pause
+  mezz: { u0: OFFICE.u0, u1: OFFICE.u1, v0: 0, v1: 4.4, h: 2.9 },
   stock: rectFromSketch(0.69, 1.0, 0.51, 1.0),
   door: { v0: 7.4, v1: 12.6 },        // porte sectionnelle sur le mur SE (u = W), entre bureau et reserve
   sideDoor: { u0: 15.0, u1: 16.0 },   // porte pieton facade SO (v = 0) : entree clients dans le bureau
